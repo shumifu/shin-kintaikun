@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>在宅勤務 勤怠管理タイマー (SortableJS版)</title>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+    <style>
+        :root {
+            --primary: #4CAF50;
+            --primary-hover: #45a049;
+            --danger: #f44336;
+            --danger-hover: #da190b;
+            --secondary: #2196F3;
+            --secondary-hover: #0b7dda;
+            --bg: #f4f7f6;
+            --text: #333;
+            --gray: #757575;
+            --gray-hover: #616161;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 950px;
+            margin: 0 auto;
+        }
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+        }
+        .control-panel {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        .input-group {
+            display: flex;
+            gap: 10px;
+        }
+        input[type="text"], input[type="date"], input[type="number"] {
+            padding: 8px 12px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            color: white;
+            transition: background 0.2s;
+        }
+        .btn-add { background-color: var(--primary); }
+        .btn-add:hover { background-color: var(--primary-hover); }
+        .btn-toggle { background-color: #607d8b; }
+        .btn-toggle:hover { background-color: #455a64; }
+        
+        .project-card {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            margin-bottom: 15px;
+            overflow: hidden;
+            transition: box-shadow 0.2s;
+        }
+        
+        .project-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 20px;
+            background: #fff;
+            user-select: none;
+        }
+        .project-title-area {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            flex-grow: 1;
+            padding: 5px 0;
+        }
+        .triangle-btn {
+            font-size: 1.2em;
+            color: var(--secondary);
+            transition: transform 0.2s;
+            display: inline-block;
+            width: 20px;
+            text-align: center;
+        }
+        .project-header h2 {
+            margin: 0;
+            font-size: 1.3em;
+            color: #34495e;
+        }
+
+        /* ツマミのデザイン */
+        .drag-handle {
+            cursor: grab;
+            font-size: 1.3em;
+            color: #aaa;
+            padding: 5px 10px 5px 0;
+            user-select: none;
+            touch-action: none; /* スマホでの誤作動防止 */
+        }
+        .drag-handle:active {
+            cursor: grabbing;
+        }
+        
+        /* SortableJSが移動中の元の場所につけるクラス */
+        .sortable-ghost {
+            opacity: 0.4;
+            background-color: #e3f2fd;
+            border: 2px dashed #2196F3;
+        }
+
+        .project-header-controls {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .btn-finish { background-color: #ff9800; }
+        .btn-finish:hover { background-color: #e68a00; }
+        .btn-restore { background-color: var(--secondary); }
+        .btn-restore:hover { background-color: var(--secondary-hover); }
+        .btn-delete-project { background-color: var(--danger); font-weight: bold; padding: 6px 12px; }
+        .btn-delete-project:hover { background-color: var(--danger-hover); }
+
+        .project-details {
+            padding: 0 20px 20px 20px;
+            border-top: 1px solid #eee;
+            background: #fff;
+        }
+
+        .timer-section {
+            text-align: center;
+            background: #fafafa;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+            border: 1px solid #eee;
+        }
+        .timer-display {
+            font-size: 3em;
+            font-weight: bold;
+            font-family: monospace;
+            margin: 15px 0;
+            color: #2c3e50;
+        }
+        .timer-controls {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            align-items: center;
+        }
+        .btn-start { background-color: var(--secondary); font-size: 1.2em; padding: 10px 30px;}
+        .btn-start:hover { background-color: var(--secondary-hover); }
+        .btn-stop { background-color: var(--danger); font-size: 1.2em; padding: 10px 30px;}
+        .btn-stop:hover { background-color: var(--danger-hover); }
+        .btn-stop:disabled, .btn-start:disabled { background-color: #ccc; cursor: not-allowed; }
+
+        .section-toggle-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            color: #455a64;
+            margin: 20px 0 10px 0;
+            user-select: none;
+            background: #f0f4f6;
+            padding: 8px 12px;
+            border-radius: 4px;
+        }
+        .section-toggle-title:hover {
+            background: #e2e8f0;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 5px;
+            margin-bottom: 5px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: left;
+        }
+        th { background-color: #f8f9fa; }
+        .total-row {
+            font-weight: bold;
+            background-color: #e8f5e9;
+        }
+        .action-cell {
+            display: flex;
+            gap: 5px;
+        }
+        .btn-action-edit { background-color: #00bcd4; }
+        .btn-action-edit:hover { background-color: #0097a7; }
+        .btn-action-delete { background-color: var(--danger); }
+        .btn-action-delete:hover { background-color: var(--danger-hover); }
+        .btn-action-save { background-color: var(--primary); }
+        .btn-action-save:hover { background-color: var(--primary-hover); }
+        .btn-action-cancel { background-color: var(--gray); }
+        .btn-action-cancel:hover { background-color: var(--gray-hover); }
+
+        .manual-add-box {
+            background-color: #f9f9f9;
+            padding: 15px;
+            border-radius: 6px;
+            border: 1px dashed #ccc;
+        }
+        .manual-inputs {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .empty-message {
+            text-align: center;
+            color: #777;
+            padding: 20px;
+        }
+        .inline-edit-input {
+            width: 70px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>プロジェクト勤怠管理</h1>
+
+    <div class="control-panel">
+        <div class="input-group">
+            <input type="text" id="new-project-name" placeholder="新しいプロジェクト名を入力">
+            <button class="btn-add" onclick="addProject()">プロジェクトを追加</button>
+        </div>
+        <div>
+            <button class="btn-toggle" id="toggle-view-btn" onclick="toggleViewMode()">終了済みプロジェクトを表示</button>
+        </div>
+    </div>
+
+    <div id="projects-container"></div>
+</div>
+
+<script>
+    let projects = JSON.parse(localStorage.getItem('timeTrackerProjects')) || [];
+    let showCompleted = false;
+    
+    const activeTimers = {};
+    const editingStates = {};
+
+    // 起動時にSortableJSをセットアップ
+    setupSortable();
+    render();
+
+    function saveData() {
+        localStorage.setItem('timeTrackerProjects', JSON.stringify(projects));
+    }
+
+    function toggleViewMode() {
+        showCompleted = !showCompleted;
+        const btn = document.getElementById('toggle-view-btn');
+        btn.innerText = showCompleted ? "進行中プロジェクトのみ表示" : "終了済みプロジェクトを表示";
+        render();
+    }
+
+    function addProject() {
+        const input = document.getElementById('new-project-name');
+        const name = input.value.trim();
+        if (!name) {
+            alert('プロジェクト名を入力してください。');
+            return;
+        }
+        
+        const newProject = {
+            id: Date.now().toString(),
+            name: name,
+            status: 'active',
+            records: [],
+            currentSession: {
+                isRunning: false,
+                startDateStr: '',
+                startTime: 0,
+                accumulatedSeconds: 0
+            },
+            isOpen: false,
+            isRecordsOpen: false,
+            isManualOpen: false
+        };
+
+        projects.push(newProject);
+        saveData();
+        input.value = '';
+        
+        if (showCompleted) toggleViewMode();
+        else render();
+    }
+
+    // SortableJSの設定
+    function setupSortable() {
+        const container = document.getElementById('projects-container');
+        new Sortable(container, {
+            handle: '.drag-handle', // ☰アイコンのみドラッグ可能にする
+            animation: 150,         // 滑らかなアニメーションの速度（ミリ秒）
+            ghostClass: 'sortable-ghost',
+            onEnd: function () {
+                // ドロップが完了した時にデータを保存する
+                reorderProjectsFromDOM();
+            }
+        });
+    }
+
+    function reorderProjectsFromDOM() {
+        const cards = [...document.querySelectorAll('.project-card')];
+        const targetStatus = showCompleted ? 'completed' : 'active';
+        
+        // 画面の並び順通りにIDを取得
+        const orderedIds = cards.map(card => card.getAttribute('data-id'));
+        
+        // IDの順にプロジェクトオブジェクトを並び替え
+        const displayedProjectsOrdered = [];
+        orderedIds.forEach(id => {
+            const p = projects.find(proj => proj.id === id);
+            if (p) displayedProjectsOrdered.push(p);
+        });
+        
+        // 非表示のデータと合体
+        const otherProjects = projects.filter(p => p.status !== targetStatus);
+        projects = [...displayedProjectsOrdered, ...otherProjects];
+        
+        saveData();
+        // ※ここではrender()を呼びません。DOMはSortableJSが移動済みであり、
+        // 再描画を省くことでタイマーのチラつきを完全に防ぎます。
+    }
+
+    function deleteProject(projectId, event) {
+        event.stopPropagation();
+        const project = projects.find(p => p.id === projectId);
+        if (!project) return;
+        if (project.currentSession.isRunning) {
+            alert('タイマーが稼働中のため削除できません。先にタイマーを停止してください。');
+            return;
+        }
+        if (confirm(`プロジェクト「${project.name}」を完全に削除しますか？\n※これまでの作業記録もすべて消去され、元に戻せなくなります。`)) {
+            if (activeTimers[projectId]) {
+                clearInterval(activeTimers[projectId]);
+                delete activeTimers[projectId];
+            }
+            projects = projects.filter(p => p.id !== projectId);
+            saveData();
+            render();
+        }
+    }
+
+    function toggleProjectOpen(projectId) {
+        const project = projects.find(p => p.id === projectId);
+        if (project) {
+            project.isOpen = !project.isOpen;
+            saveData();
+            render();
+        }
+    }
+
+    function toggleRecordsOpen(projectId) {
+        const project = projects.find(p => p.id === projectId);
+        if (project) {
+            project.isRecordsOpen = !project.isRecordsOpen;
+            saveData();
+            render();
+        }
+    }
+
+    function toggleManualOpen(projectId) {
+        const project = projects.find(p => p.id === projectId);
+        if (project) {
+            project.isManualOpen = !project.isManualOpen;
+            saveData();
+            render();
+        }
+    }
+
+    function toggleProjectStatus(projectId, event) {
+        event.stopPropagation();
+        const project = projects.find(p => p.id === projectId);
+        if (project) {
+            if (project.currentSession.isRunning) {
+                alert('計測中のタイマーを停止してから変更してください。');
+                return;
+            }
+            project.status = project.status === 'active' ? 'completed' : 'active';
+            saveData();
+            render();
+        }
+    }
+
+    function startTimer(projectId) {
+        const project = projects.find(p => p.id === projectId);
+        const dateInput = document.getElementById(`date-${projectId}`);
+        const dateStr = dateInput.value;
+        if (!dateStr) {
+            alert('タイマーを開始する前に、日付を入力してください。');
+            return;
+        }
+        project.currentSession.isRunning = true;
+        project.currentSession.startDateStr = dateStr;
+        project.currentSession.startTime = Date.now();
+        saveData();
+        renderProjectCard(project);
+        startTimerInterval(projectId);
+    }
+
+    function stopTimer(projectId) {
+        const project = projects.find(p => p.id === projectId);
+        const now = Date.now();
+        const sessionSeconds = Math.floor((now - project.currentSession.startTime) / 1000);
+        const totalElapsedSeconds = project.currentSession.accumulatedSeconds + sessionSeconds;
+        if (activeTimers[projectId]) {
+            clearInterval(activeTimers[projectId]);
+            delete activeTimers[projectId];
+        }
+        if (totalElapsedSeconds > 0) {
+            project.records.push({
+                date: project.currentSession.startDateStr,
+                elapsedSeconds: totalElapsedSeconds
+            });
+        }
+        project.currentSession.isRunning = false;
+        project.currentSession.startDateStr = '';
+        project.currentSession.startTime = 0;
+        project.currentSession.accumulatedSeconds = 0;
+        saveData();
+        render();
+    }
+
+    function startTimerInterval(projectId) {
+        if (activeTimers[projectId]) clearInterval(activeTimers[projectId]);
+        activeTimers[projectId] = setInterval(() => {
+            const project = projects.find(p => p.id === projectId);
+            if (!project || !project.currentSession.isRunning) {
+                clearInterval(activeTimers[projectId]);
+                return;
+            }
+            const now = Date.now();
+            const sessionSeconds = Math.floor((now - project.currentSession.startTime) / 1000);
+            const totalSeconds = project.currentSession.accumulatedSeconds + sessionSeconds;
+            const display = document.getElementById(`timer-display-${projectId}`);
+            if (display) display.innerText = formatTimerDisplay(totalSeconds);
+        }, 1000);
+    }
+
+    function addManualRecord(projectId) {
+        const dateInput = document.getElementById(`manual-date-${projectId}`);
+        const hInput = document.getElementById(`manual-h-${projectId}`);
+        const mInput = document.getElementById(`manual-m-${projectId}`);
+        const date = dateInput.value;
+        const h = parseInt(hInput.value) || 0;
+        const m = parseInt(mInput.value) || 0;
+        if (!date) { alert('日付を選択してください。'); return; }
+        if (h < 0 || m < 0 || m >= 60 || (h === 0 && m === 0)) { alert('正しい時間を入力してください。'); return; }
+        const project = projects.find(p => p.id === projectId);
+        project.records.push({ date: date, elapsedSeconds: (h * 60 + m) * 60 });
+        saveData();
+        render();
+    }
+
+    function startEditRecord(projectId, index) { editingStates[projectId] = index; render(); }
+    function cancelEditRecord(projectId) { delete editingStates[projectId]; render(); }
+    
+    function saveEditRecord(projectId, index) {
+        const project = projects.find(p => p.id === projectId);
+        const date = document.getElementById(`edit-date-${projectId}-${index}`).value;
+        const h = parseInt(document.getElementById(`edit-h-${projectId}-${index}`).value) || 0;
+        const m = parseInt(document.getElementById(`edit-m-${projectId}-${index}`).value) || 0;
+        if (!date) { alert('日付を選択してください。'); return; }
+        if (h < 0 || m < 0 || m >= 60 || (h === 0 && m === 0)) { alert('正しい時間を入力してください。'); return; }
+        project.records[index].date = date;
+        project.records[index].elapsedSeconds = (h * 60 + m) * 60;
+        delete editingStates[projectId];
+        saveData();
+        render();
+    }
+
+    function deleteRecord(projectId, index) {
+        if (confirm('この作業記録を削除してもよろしいですか？')) {
+            const project = projects.find(p => p.id === projectId);
+            project.records.splice(index, 1);
+            saveData();
+            render();
+        }
+    }
+
+    function formatTimerDisplay(totalSeconds) {
+        const h = Math.floor(totalSeconds / 3600);
+        const m = Math.floor((totalSeconds % 3600) / 60);
+        const s = totalSeconds % 60;
+        return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    }
+
+    function formatRoundedMinutesDisplay(totalSeconds) {
+        const roundedMinutes = Math.ceil(totalSeconds / 60);
+        const h = Math.floor(roundedMinutes / 60);
+        const m = roundedMinutes % 60;
+        return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    }
+
+    function render() {
+        const container = document.getElementById('projects-container');
+        container.innerHTML = '';
+        const targetStatus = showCompleted ? 'completed' : 'active';
+        const filteredProjects = projects.filter(p => p.status === targetStatus);
+
+        if (filteredProjects.length === 0) {
+            container.innerHTML = `<div class="empty-message">表示するプロジェクトがありません。</div>`;
+            return;
+        }
+
+        filteredProjects.forEach((project) => {
+            if (project.isOpen === undefined) project.isOpen = false;
+            if (project.isRecordsOpen === undefined) project.isRecordsOpen = false;
+            if (project.isManualOpen === undefined) project.isManualOpen = false;
+
+            const card = document.createElement('div');
+            card.className = 'project-card';
+            card.id = `project-card-${project.id}`;
+            card.setAttribute('data-id', project.id);
+            container.appendChild(card);
+
+            renderProjectCard(project);
+
+            if (project.currentSession.isRunning && !activeTimers[project.id]) {
+                startTimerInterval(project.id);
+            }
+        });
+    }
+
+    function renderProjectCard(project) {
+        const card = document.getElementById(`project-card-${project.id}`);
+        if (!card) return;
+
+        let displaySeconds = project.currentSession.accumulatedSeconds;
+        if (project.currentSession.isRunning) {
+            displaySeconds += Math.floor((Date.now() - project.currentSession.startTime) / 1000);
+        }
+
+        const isRunning = project.currentSession.isRunning;
+        const today = new Date().toISOString().split('T')[0];
+        const editingIndex = editingStates[project.id];
+        
+        let tableHTML = '';
+        let totalMinutes = 0;
+        
+        project.records.forEach((record) => {
+            totalMinutes += Math.ceil(record.elapsedSeconds / 60);
+        });
+
+        const totalH = Math.floor(totalMinutes / 60);
+        const totalM = totalMinutes % 60;
+        const totalDisplay = `${String(totalH).padStart(2, '0')}:${String(totalM).padStart(2, '0')}`;
+
+        if (project.isRecordsOpen) {
+            tableHTML = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width: 30%;">日付</th>
+                            <th style="width: 35%;">作業時間 (HH:MM) ※秒切り上げ</th>
+                            <th style="width: 35%;">操作欄</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            if (project.records.length === 0) {
+                tableHTML += `<tr><td colspan="3" style="text-align:center; color:#777;">記録がありません</td></tr>`;
+            } else {
+                project.records.forEach((record, idx) => {
+                    const roundedMins = Math.ceil(record.elapsedSeconds / 60);
+                    if (editingIndex === idx) {
+                        const currentH = Math.floor(roundedMins / 60);
+                        const currentM = roundedMins % 60;
+                        tableHTML += `
+                            <tr>
+                                <td><input type="date" id="edit-date-${project.id}-${idx}" value="${record.date}"></td>
+                                <td>
+                                    <input type="number" id="edit-h-${project.id}-${idx}" class="inline-edit-input" min="0" value="${currentH}"> : 
+                                    <input type="number" id="edit-m-${project.id}-${idx}" class="inline-edit-input" min="0" max="59" value="${currentM}">
+                                </td>
+                                <td class="action-cell">
+                                    <button class="btn-action-save" onclick="saveEditRecord('${project.id}', ${idx})">保存</button>
+                                    <button class="btn-action-cancel" onclick="cancelEditRecord('${project.id}')">取消</button>
+                                </td>
+                            </tr>
+                        `;
+                    } else {
+                        tableHTML += `
+                            <tr>
+                                <td>${record.date}</td>
+                                <td>${formatRoundedMinutesDisplay(record.elapsedSeconds)}</td>
+                                <td class="action-cell">
+                                    <button class="btn-action-edit" onclick="startEditRecord('${project.id}', ${idx})">編集</button>
+                                    <button class="btn-action-delete" onclick="deleteRecord('${project.id}', ${idx})">削除</button>
+                                </td>
+                            </tr>
+                        `;
+                    }
+                });
+            }
+            tableHTML += `
+                    <tr class="total-row">
+                        <td>合計時間</td>
+                        <td>${totalDisplay}</td>
+                        <td></td>
+                    </tr>
+                    </tbody>
+                </table>
+            `;
+        } else {
+            tableHTML = `<div style="padding: 5px 10px; font-weight: bold; color: #2e7d32;">現在の合計時間: ${totalDisplay}</div>`;
+        }
+
+        let html = `
+            <div class="project-header">
+                <div style="display: flex; align-items: center; gap: 5px; flex-grow: 1;">
+                    <span class="drag-handle" title="ドラッグして並び替え">☰</span>
+                    <div class="project-title-area" onclick="toggleProjectOpen('${project.id}')">
+                        <span class="triangle-btn">${project.isOpen ? '▼' : '▶'}</span>
+                        <h2>${project.name}</h2>
+                    </div>
+                </div>
+                <div class="project-header-controls">
+                    <button class="${project.status === 'active' ? 'btn-finish' : 'btn-restore'}" 
+                            onclick="toggleProjectStatus('${project.id}', event)">
+                        ${project.status === 'active' ? '終了する' : '進行中に戻す'}
+                    </button>
+                    <button class="btn-delete-project" onclick="deleteProject('${project.id}', event)">✕ 削除</button>
+                </div>
+            </div>
+        `;
+
+        if (project.isOpen) {
+            html += `
+                <div class="project-details">
+                    ${project.status === 'active' ? `
+                    <div class="timer-section">
+                        <div class="timer-controls" style="margin-bottom: 10px;">
+                            <label>作業日: <input type="date" id="date-${project.id}" value="${project.currentSession.startDateStr || today}" ${isRunning ? 'disabled' : ''}></label>
+                        </div>
+                        <div class="timer-display" id="timer-display-${project.id}">
+                            ${formatTimerDisplay(displaySeconds)}
+                        </div>
+                        <div class="timer-controls">
+                            <button class="btn-start" onclick="startTimer('${project.id}')" ${isRunning ? 'disabled' : ''}>開始</button>
+                            <button class="btn-stop" onclick="stopTimer('${project.id}')" ${!isRunning ? 'disabled' : ''}>終了して記録</button>
+                        </div>
+                    </div>
+                    ` : ''}
+
+                    <div class="section-toggle-title" onclick="toggleRecordsOpen('${project.id}')">
+                        <span>${project.isRecordsOpen ? '▼' : '▶'}</span>
+                        <strong>作業記録と操作（編集・削除）</strong>
+                    </div>
+                    ${tableHTML}
+
+                    ${project.status === 'active' ? `
+                    <div class="section-toggle-title" onclick="toggleManualOpen('${project.id}')">
+                        <span>${project.isManualOpen ? '▼' : '▶'}</span>
+                        <strong>➕ タイマー押し忘れ・手動記録追加</strong>
+                    </div>
+                    ${project.isManualOpen ? `
+                    <div class="manual-add-box">
+                        <div class="manual-inputs">
+                            <label>日付: <input type="date" id="manual-date-${project.id}" value="${today}"></label>
+                            <label><input type="number" id="manual-h-${project.id}" min="0" placeholder="0" style="width: 60px;"> 時間</label>
+                            <label><input type="number" id="manual-m-${project.id}" min="0" max="59" placeholder="0" style="width: 60px;"> 分</label>
+                            <button class="btn-add" onclick="addManualRecord('${project.id}')">記録を追加</button>
+                        </div>
+                    </div>
+                    ` : ''}
+                    ` : ''}
+                </div>
+            `;
+        }
+
+        card.innerHTML = html;
+    }
+</script>
+
+</body>
+</html>
