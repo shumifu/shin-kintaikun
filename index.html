@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>在宅勤務 勤怠管理タイマー (SortableJS版)</title>
+    <title>在宅勤務 勤怠管理タイマー (月別集計・SortableJS版)</title>
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
     <style>
         :root {
@@ -11,7 +11,7 @@
             --primary-hover: #0b7dda;
             --danger: #2196F3;
             --danger-hover: #0b7dda;
-            --secondary: #2196F3;
+            --secondary: #2196F3; 
             --secondary-hover: #0b7dda;
             --bg: #f4f7f6;
             --text: #333;
@@ -69,7 +69,7 @@
         .btn-toggle { background-color: #607d8b; }
         .btn-toggle:hover { background-color: #455a64; }
         
-        .project-card {
+        .project-card, .summary-card {
             background: white;
             border-radius: 8px;
             box-shadow: 0 2px 5px rgba(0,0,0,0.1);
@@ -78,12 +78,20 @@
             transition: box-shadow 0.2s;
         }
         
-        .project-header {
+        /* 勤怠まとめ用スタイル追加 */
+        .summary-card {
+            border: 2px solid #607d8b;
+            margin-top: 30px;
+        }
+        .summary-header {
+            background: #eceff1;
+        }
+        
+        .project-header, .summary-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
             padding: 12px 20px;
-            background: #fff;
             user-select: none;
         }
         .project-title-area {
@@ -96,32 +104,30 @@
         }
         .triangle-btn {
             font-size: 1.2em;
-            color: var(--secondary);
+            color: #607d8b;
             transition: transform 0.2s;
             display: inline-block;
             width: 20px;
             text-align: center;
         }
-        .project-header h2 {
+        .project-header h2, .summary-header h2 {
             margin: 0;
             font-size: 1.3em;
             color: #34495e;
         }
 
-        /* ツマミのデザイン */
         .drag-handle {
             cursor: grab;
             font-size: 1.3em;
             color: #aaa;
             padding: 5px 10px 5px 0;
             user-select: none;
-            touch-action: none; /* スマホでの誤作動防止 */
+            touch-action: none;
         }
         .drag-handle:active {
             cursor: grabbing;
         }
         
-        /* SortableJSが移動中の元の場所につけるクラス */
         .sortable-ghost {
             opacity: 0.4;
             background-color: #e3f2fd;
@@ -135,12 +141,12 @@
         }
         .btn-finish { background-color: #2196F3; }
         .btn-finish:hover { background-color: #0b7dda; }
-        .btn-restore { background-color: var(--secondary); }
-        .btn-restore:hover { background-color: var(--secondary-hover); }
+        .btn-restore { background-color: #9e9e9e; }
+        .btn-restore:hover { background-color: #757575; }
         .btn-delete-project { background-color: var(--danger); font-weight: bold; padding: 6px 12px; }
         .btn-delete-project:hover { background-color: var(--danger-hover); }
 
-        .project-details {
+        .project-details, .summary-details {
             padding: 0 20px 20px 20px;
             border-top: 1px solid #eee;
             background: #fff;
@@ -176,17 +182,22 @@
         .section-toggle-title {
             display: flex;
             align-items: center;
-            gap: 8px;
+            justify-content: space-between;
             cursor: pointer;
             color: #455a64;
             margin: 20px 0 10px 0;
             user-select: none;
             background: #f0f4f6;
-            padding: 8px 12px;
+            padding: 10px 15px;
             border-radius: 4px;
         }
         .section-toggle-title:hover {
             background: #e2e8f0;
+        }
+        .section-toggle-title .left-part {
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
 
         table {
@@ -217,6 +228,8 @@
         .btn-action-save:hover { background-color: var(--primary-hover); }
         .btn-action-cancel { background-color: var(--gray); }
         .btn-action-cancel:hover { background-color: var(--gray-hover); }
+        .btn-copy { background-color: #607d8b; font-size: 0.9em; padding: 5px 10px;}
+        .btn-copy:hover { background-color: #455a64; }
 
         .manual-add-box {
             background-color: #f9f9f9;
@@ -256,16 +269,21 @@
     </div>
 
     <div id="projects-container"></div>
+
+    <div id="summary-container"></div>
 </div>
 
 <script>
     let projects = JSON.parse(localStorage.getItem('timeTrackerProjects')) || [];
     let showCompleted = false;
     
+    // まとめ欄の開閉状態を管理する変数
+    let isSummaryOpen = false;
+    let openMonths = {};
+    
     const activeTimers = {};
     const editingStates = {};
 
-    // 起動時にSortableJSをセットアップ
     setupSortable();
     render();
 
@@ -299,7 +317,7 @@
                 startTime: 0,
                 accumulatedSeconds: 0
             },
-            isOpen: false,
+            isOpen: true, // 新規作成時は最初から開いた状態にする
             isRecordsOpen: false,
             isManualOpen: false
         };
@@ -312,15 +330,13 @@
         else render();
     }
 
-    // SortableJSの設定
     function setupSortable() {
         const container = document.getElementById('projects-container');
         new Sortable(container, {
-            handle: '.drag-handle', // ☰アイコンのみドラッグ可能にする
-            animation: 150,         // 滑らかなアニメーションの速度（ミリ秒）
+            handle: '.drag-handle',
+            animation: 150,
             ghostClass: 'sortable-ghost',
             onEnd: function () {
-                // ドロップが完了した時にデータを保存する
                 reorderProjectsFromDOM();
             }
         });
@@ -329,24 +345,18 @@
     function reorderProjectsFromDOM() {
         const cards = [...document.querySelectorAll('.project-card')];
         const targetStatus = showCompleted ? 'completed' : 'active';
-        
-        // 画面の並び順通りにIDを取得
         const orderedIds = cards.map(card => card.getAttribute('data-id'));
         
-        // IDの順にプロジェクトオブジェクトを並び替え
         const displayedProjectsOrdered = [];
         orderedIds.forEach(id => {
             const p = projects.find(proj => proj.id === id);
             if (p) displayedProjectsOrdered.push(p);
         });
         
-        // 非表示のデータと合体
         const otherProjects = projects.filter(p => p.status !== targetStatus);
         projects = [...displayedProjectsOrdered, ...otherProjects];
         
         saveData();
-        // ※ここではrender()を呼びません。DOMはSortableJSが移動済みであり、
-        // 再描画を省くことでタイマーのチラつきを完全に防ぎます。
     }
 
     function deleteProject(projectId, event) {
@@ -421,7 +431,7 @@
         project.currentSession.startDateStr = dateStr;
         project.currentSession.startTime = Date.now();
         saveData();
-        renderProjectCard(project);
+        render(); // 再描画して状態を反映
         startTimerInterval(projectId);
     }
 
@@ -430,6 +440,7 @@
         const now = Date.now();
         const sessionSeconds = Math.floor((now - project.currentSession.startTime) / 1000);
         const totalElapsedSeconds = project.currentSession.accumulatedSeconds + sessionSeconds;
+        
         if (activeTimers[projectId]) {
             clearInterval(activeTimers[projectId]);
             delete activeTimers[projectId];
@@ -473,9 +484,15 @@
         const m = parseInt(mInput.value) || 0;
         if (!date) { alert('日付を選択してください。'); return; }
         if (h < 0 || m < 0 || m >= 60 || (h === 0 && m === 0)) { alert('正しい時間を入力してください。'); return; }
+        
         const project = projects.find(p => p.id === projectId);
         project.records.push({ date: date, elapsedSeconds: (h * 60 + m) * 60 });
         saveData();
+        
+        // 追加後に入力欄をリセット
+        hInput.value = '';
+        mInput.value = '';
+        
         render();
     }
 
@@ -519,6 +536,162 @@
         return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
     }
 
+    // ========== ここから追加機能：勤怠まとめの関数 ==========
+
+    function toggleSummaryOpen() {
+        isSummaryOpen = !isSummaryOpen;
+        render();
+    }
+
+    function toggleMonthOpen(monthKey, event) {
+        // コピーボタンを押した時に開閉させないための処理
+        if (event.target.tagName.toLowerCase() === 'button') return;
+        
+        openMonths[monthKey] = !openMonths[monthKey];
+        render();
+    }
+
+    function copyToClipboard(text) {
+        navigator.clipboard.writeText(text).then(() => {
+            alert("クリップボードにコピーしました！\nメモ帳やメールなどに貼り付けてください。");
+        }).catch(err => {
+            alert("コピーに失敗しました。お使いのブラウザが対応していない可能性があります。");
+        });
+    }
+
+　　function renderSummary() {
+        const container = document.getElementById('summary-container');
+        container.innerHTML = '';
+
+        const monthlyData = {};
+
+        projects.forEach(project => {
+            project.records.forEach(record => {
+                if (!record.date) return;
+                const monthKey = record.date.substring(0, 7);
+                
+                if (!monthlyData[monthKey]) {
+                    monthlyData[monthKey] = { projects: {} };
+                }
+                
+                if (!monthlyData[monthKey].projects[project.name]) {
+                    monthlyData[monthKey].projects[project.name] = 0;
+                }
+                
+                monthlyData[monthKey].projects[project.name] += record.elapsedSeconds;
+            });
+        });
+
+        const sortedMonths = Object.keys(monthlyData).sort((a, b) => b.localeCompare(a));
+
+        let html = `
+            <div class="summary-card">
+                <div class="summary-header" onclick="toggleSummaryOpen()" style="cursor: pointer;">
+                    <div class="project-title-area">
+                        <span class="triangle-btn">${isSummaryOpen ? '▼' : '▶'}</span>
+                        <h2>📋 月ごとの勤怠まとめ</h2>
+                    </div>
+                </div>
+        `;
+
+        if (isSummaryOpen) {
+            html += `<div class="summary-details" style="padding-top: 15px;">`;
+            
+            if (sortedMonths.length === 0) {
+                html += `<div class="empty-message">まだ作業記録がありません。</div>`;
+            } else {
+                sortedMonths.forEach(monthKey => {
+                    const monthData = monthlyData[monthKey];
+                    const [year, month] = monthKey.split('-');
+                    const displayMonth = `${year}年${parseInt(month, 10)}月`;
+                    
+                    const isOpen = openMonths[monthKey];
+                    
+                    // 【修正】プロジェクトごとの「切り上げ後の分」を合算して総時間を出す
+                    let monthTotalMinutes = 0;
+                    for (const seconds of Object.values(monthData.projects)) {
+                        monthTotalMinutes += Math.ceil(seconds / 60);
+                    }
+                    const totalH = Math.floor(monthTotalMinutes / 60);
+                    const totalM = monthTotalMinutes % 60;
+                    const monthTotalDisplay = `${String(totalH).padStart(2, '0')}:${String(totalM).padStart(2, '0')}`;
+
+                    html += `
+                        <div class="section-toggle-title" onclick="toggleMonthOpen('${monthKey}', event)">
+                            <div class="left-part">
+                                <span class="triangle-btn" style="width: auto;">${isOpen ? '▼' : '▶'}</span>
+                                <strong>${displayMonth} (総計: ${monthTotalDisplay})</strong>
+                            </div>
+                            <button class="btn-copy" onclick="copyMonthData('${displayMonth}', '${monthKey}')">コピー</button>
+                        </div>
+                    `;
+
+                    if (isOpen) {
+                        html += `
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th style="width: 70%;">プロジェクト名</th>
+                                        <th style="width: 30%;">合計時間</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                        `;
+                        
+                        for (const [projectName, seconds] of Object.entries(monthData.projects)) {
+                            html += `
+                                <tr>
+                                    <td>${projectName}</td>
+                                    <td>${formatRoundedMinutesDisplay(seconds)}</td>
+                                </tr>
+                            `;
+                        }
+
+                        html += `
+                                    <tr class="total-row">
+                                        <td>【${displayMonth}】 総時間</td>
+                                        <td>${monthTotalDisplay}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        `;
+                    }
+                });
+            }
+            html += `</div>`;
+        }
+        
+        html += `</div>`;
+        container.innerHTML = html;
+
+        // コピー機能の計算も修正
+        window.copyMonthData = function(displayMonth, monthKey) {
+            const data = monthlyData[monthKey];
+            let textToCopy = `【${displayMonth} 勤怠まとめ】\n`;
+            textToCopy += `----------------------------\n`;
+            
+            let monthTotalMinutes = 0;
+            
+            for (const [projectName, seconds] of Object.entries(data.projects)) {
+                // コピー用のテキストを作る際も「切り上げ後の分」を計算
+                const pMins = Math.ceil(seconds / 60);
+                monthTotalMinutes += pMins;
+                const h = Math.floor(pMins / 60);
+                const m = pMins % 60;
+                textToCopy += `・${projectName}： ${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}\n`;
+            }
+            
+            textToCopy += `----------------------------\n`;
+            const th = Math.floor(monthTotalMinutes / 60);
+            const tm = monthTotalMinutes % 60;
+            textToCopy += `総時間： ${String(th).padStart(2, '0')}:${String(tm).padStart(2, '0')}\n`;
+            
+            copyToClipboard(textToCopy);
+        };
+    }
+
+    // ========== 全体の描画処理 ==========
+
     function render() {
         const container = document.getElementById('projects-container');
         container.innerHTML = '';
@@ -527,26 +700,28 @@
 
         if (filteredProjects.length === 0) {
             container.innerHTML = `<div class="empty-message">表示するプロジェクトがありません。</div>`;
-            return;
+        } else {
+            filteredProjects.forEach((project) => {
+                if (project.isOpen === undefined) project.isOpen = false;
+                if (project.isRecordsOpen === undefined) project.isRecordsOpen = false;
+                if (project.isManualOpen === undefined) project.isManualOpen = false;
+
+                const card = document.createElement('div');
+                card.className = 'project-card';
+                card.id = `project-card-${project.id}`;
+                card.setAttribute('data-id', project.id);
+                container.appendChild(card);
+
+                renderProjectCard(project);
+
+                if (project.currentSession.isRunning && !activeTimers[project.id]) {
+                    startTimerInterval(project.id);
+                }
+            });
         }
-
-        filteredProjects.forEach((project) => {
-            if (project.isOpen === undefined) project.isOpen = false;
-            if (project.isRecordsOpen === undefined) project.isRecordsOpen = false;
-            if (project.isManualOpen === undefined) project.isManualOpen = false;
-
-            const card = document.createElement('div');
-            card.className = 'project-card';
-            card.id = `project-card-${project.id}`;
-            card.setAttribute('data-id', project.id);
-            container.appendChild(card);
-
-            renderProjectCard(project);
-
-            if (project.currentSession.isRunning && !activeTimers[project.id]) {
-                startTimerInterval(project.id);
-            }
-        });
+        
+        // 最後にまとめ項目を描画
+        renderSummary();
     }
 
     function renderProjectCard(project) {
@@ -563,15 +738,13 @@
         const editingIndex = editingStates[project.id];
         
         let tableHTML = '';
-        let totalMinutes = 0;
+        let totalSeconds = 0;
         
         project.records.forEach((record) => {
-            totalMinutes += Math.ceil(record.elapsedSeconds / 60);
+            totalSeconds += record.elapsedSeconds;
         });
 
-        const totalH = Math.floor(totalMinutes / 60);
-        const totalM = totalMinutes % 60;
-        const totalDisplay = `${String(totalH).padStart(2, '0')}:${String(totalM).padStart(2, '0')}`;
+        const totalDisplay = formatRoundedMinutesDisplay(totalSeconds);
 
         if (project.isRecordsOpen) {
             tableHTML = `
@@ -671,15 +844,19 @@
                     ` : ''}
 
                     <div class="section-toggle-title" onclick="toggleRecordsOpen('${project.id}')">
-                        <span>${project.isRecordsOpen ? '▼' : '▶'}</span>
-                        <strong>作業記録と操作（編集・削除）</strong>
+                        <div class="left-part">
+                            <span class="triangle-btn" style="width: auto;">${project.isRecordsOpen ? '▼' : '▶'}</span>
+                            <strong>作業記録と操作（編集・削除）</strong>
+                        </div>
                     </div>
                     ${tableHTML}
 
                     ${project.status === 'active' ? `
                     <div class="section-toggle-title" onclick="toggleManualOpen('${project.id}')">
-                        <span>${project.isManualOpen ? '▼' : '▶'}</span>
-                        <strong>➕ タイマー押し忘れ・手動記録追加</strong>
+                        <div class="left-part">
+                            <span class="triangle-btn" style="width: auto;">${project.isManualOpen ? '▼' : '▶'}</span>
+                            <strong>➕ タイマー押し忘れ・手動記録追加</strong>
+                        </div>
                     </div>
                     ${project.isManualOpen ? `
                     <div class="manual-add-box">
