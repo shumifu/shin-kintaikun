@@ -737,14 +737,20 @@
         const today = new Date().toISOString().split('T')[0];
         const editingIndex = editingStates[project.id];
         
+        // --- ここから追加 ---
         let tableHTML = '';
-        let totalSeconds = 0;
+        let totalRoundedMinutes = 0;
         
         project.records.forEach((record) => {
-            totalSeconds += record.elapsedSeconds;
+            // 個別のレコードを秒から分に切り上げて加算
+            totalRoundedMinutes += Math.ceil(record.elapsedSeconds / 60);
         });
 
-        const totalDisplay = formatRoundedMinutesDisplay(totalSeconds);
+        // 切り上げ合算した総分数から、HH:MM形式の文字列を作成
+        const totalH = Math.floor(totalRoundedMinutes / 60);
+        const totalM = totalRoundedMinutes % 60;
+        const totalDisplay = `${String(totalH).padStart(2, '0')}:${String(totalM).padStart(2, '0')}`;
+// --- ここまで追加 ---
 
         if (project.isRecordsOpen) {
             tableHTML = `
